@@ -1,0 +1,6 @@
+agent_id,notes,status
+AGT001,cust acct bal low auth declined pymnt returned,resolved
+AGT002,txn disputed chrgbck initiated cust notified,pending
+AGT003,acct in good standing avail lmt increased per req,resolved
+AGT004,cust called re stmnt discrepancy pymnt posted twice,escalated
+AGT005,auth failed due to expired card cust updated info,resolved

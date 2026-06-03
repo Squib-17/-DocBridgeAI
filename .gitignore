@@ -1,0 +1,25 @@
+# Environment
+.env
+.venv/
+venv/
+
+# Output files
+output/
+
+# Internal planning docs — not for public repo
+private/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
