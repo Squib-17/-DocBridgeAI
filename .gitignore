@@ -9,6 +9,10 @@ output/
 # Internal planning docs — not for public repo
 private/
 
+# Claude/AI tool instructions — not for public repo
+AGENTS.md
+CLAUDE.md
+
 # Python
 __pycache__/
 *.py[cod]
