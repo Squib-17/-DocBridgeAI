@@ -152,6 +152,11 @@ def validate_document(
             ),
         ))
 
+    # LLM-generated structure is usable but not organic — cap at 0.5 so the
+    # composite score reflects that the source document was unstructured.
+    if llm_generated_structure:
+        structure_score = 0.5
+
     metadata["heading_structure"] = (
         "generated" if llm_generated_structure else ("detected" if has_headings else "none")
     )

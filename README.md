@@ -1,8 +1,6 @@
 # DocBridgeAI
 
-**A standalone document normalization pipeline for enterprise AI systems.**
-
-DocBridgeAI converts messy real-world files — PDFs, scanned documents, Word files, Markdown, spreadsheets — into clean, validated, metadata-rich output that downstream AI systems can ingest directly. It is the layer between raw enterprise knowledge and production-ready AI pipelines.
+A document normalization pipeline. Takes PDFs, scanned docs, Word files, Markdown, and spreadsheets and converts them to clean, structured output that RAG pipelines and analytics systems can ingest without manual cleanup.
 
 ---
 
@@ -16,15 +14,16 @@ Most RAG tutorials, demos, and course projects start with clean, pre-formatted m
 - Agent notes written in shorthand (`cust acct bal avail 0, auth decl, chrgbck pndng`)
 - Excel sheets with customer interaction logs across hundreds of columns
 
-Feeding any of these directly into an embedding pipeline produces poor retrieval, citation failures, and answers that drift from the source material.
-
-DocBridgeAI solves this problem at the source. It normalizes inputs before they ever touch a vector database.
+Feeding any of these directly into an embedding pipeline degrades retrieval, breaks citations, and produces outputs that drift from the source. This pipeline handles the cleanup step before anything reaches the vector database.
 
 ---
 
 ## Demo
 
-![DocBridgeAI — demo mode results showing 5 processed files with confidence scores and AI badges](docs/screenshot_demo.png)
+![Upload files](docs/upload_file.png)
+![Process and configure](docs/process_and_configure.png)
+![Results](docs/results.png)
+![Download outputs](docs/download.png)
 
 Load the 5 pre-built sample files (CSV, XLSX, Markdown, Word, PDF), configure processing options, and see per-file results with confidence scoring, extraction method, AI expansion badge, and quality warnings. Download original source files alongside processed outputs to compare before and after.
 
@@ -101,16 +100,16 @@ Cleans structured data files where content is informal, abbreviated, or written 
 
 ## Quality Validation
 
-DocBridgeAI does not blindly ingest everything it receives. Each file is scored and routed:
+Each file is scored on extraction quality and routed to one of four statuses:
 
 | Confidence | Status | Action |
 |---|---|---|
-| ≥ 0.85 | Approved | Output written, no action needed |
+| ≥ 0.85 | Approved | Output written, ready to ingest |
 | 0.60 – 0.84 | Review Recommended | Output written, flagged for human check |
 | < 0.60 | Review Required | Output written, strongly flagged |
 | Extraction failed | Rejected | No output, reason in report |
 
-This routing logic is what makes DocBridgeAI enterprise-ready rather than demo-ready. A pipeline that silently ingests low-confidence OCR output or garbled shorthand will produce RAG systems that hallucinate or fail to retrieve. DocBridgeAI surfaces the problem before it becomes invisible.
+Silently ingesting low-confidence OCR output or garbled shorthand is how RAG systems start hallucinating. The pipeline flags the problem before it gets buried downstream.
 
 ---
 
@@ -128,13 +127,13 @@ The processing report logs which terms were handled by glossary vs. LLM.
 
 ## Integration with Other Projects
 
-DocBridgeAI is a reusable layer. It was designed with two specific downstream consumers in mind:
+Built as a shared preprocessing layer for two other projects in this portfolio:
 
-**[NextGenCapitalRAG](../NextGenCapitalRAG)** — An internal banking assistant RAG system. DocBridgeAI normalizes policy documents, product guides, and compliance files into the canonical markdown format that NextGenCapitalRAG's ingestion pipeline expects.
+**[NextGenCapitalRAG](../NextGenCapitalRAG)** — A banking assistant RAG system. DocBridgeAI normalizes policy documents and compliance files into the markdown format the RAG ingestion pipeline expects.
 
-**[AIServicingIntelligence](../AIServicingIntelligence)** — A customer servicing AI system. DocBridgeAI cleans agent interaction logs and customer notes from Excel/CSV exports into readable, structured data that the analytics and AI layers can process.
+**[AIServicingIntelligence](../AIServicingIntelligence)** — A customer servicing AI system. DocBridgeAI cleans agent interaction logs from Excel/CSV exports into structured data the analytics layer can use.
 
-Any other project that needs to go from raw enterprise files to structured, clean knowledge can use DocBridgeAI as a preprocessing step.
+Both projects have different input types and output requirements, which is why this ended up as a standalone repo rather than a module inside either one.
 
 ---
 
@@ -176,15 +175,14 @@ python -m docbridgeai.pipeline --input raw_sources/ --output knowledge-base/
 
 ## Limitations and Scope
 
-DocBridgeAI v1 is intentionally scoped for demo and portfolio use:
+v1 is scoped for demo use:
 
-- Maximum 5 files per session
-- Maximum 20 MB per file
+- Maximum 5 files per session, 20 MB each
 - No audio support (MP3, WAV)
 - No cloud storage connectors (SharePoint, Google Drive, Confluence)
-- No human review workflow or approval queue
+- No human review workflow
 
-These are design decisions, not architectural limits. See the scalability section below.
+The architecture is stateless per document, so the 5-file cap is a UI decision. See the scalability section for what would change at volume.
 
 ### Known Extraction Limitations
 
