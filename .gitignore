@@ -16,7 +16,7 @@ __pycache__/
 dist/
 build/
 .pytest_cache/
-
+*.pyc
 # macOS
 .DS_Store
 

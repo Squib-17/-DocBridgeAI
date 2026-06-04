@@ -157,6 +157,19 @@ def validate_document(
     )
     metadata["llm_generated_structure"] = llm_generated_structure
 
+    # --- Signal 6: DOCX table rendering ---
+    # Warn if source had tables but none made it into cleaned output.
+    if extracted.tables and not _has_markdown_table(cleaned.cleaned_text):
+        issues.append(ProcessingIssue(
+            severity="warning",
+            field="table_rendering",
+            message=(
+                f"{len(extracted.tables)} table(s) detected in source document "
+                "but not rendered into output. Review the source and add table "
+                "content manually if needed."
+            ),
+        ))
+
     # --- Composite score ---
     composite = (
         W_EXTRACTION * extraction_score
@@ -409,6 +422,11 @@ def _classify_doc_type(filename: str, text: str) -> str:
     if any(kw in combined for kw in ("product", "loan", "card", "account", "agreement", "enrollment")):
         return "product"
     return "document"
+
+
+def _has_markdown_table(text: str) -> bool:
+    """Return True if text contains at least one rendered markdown table row."""
+    return bool(re.search(r"^\|.+\|$", text, re.MULTILINE))
 
 
 def _metadata_completeness_score(metadata: dict[str, Any]) -> float:

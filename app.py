@@ -383,6 +383,18 @@ h1, h2, h3, h4 {
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+_DEMO_MIME: dict[str, str] = {
+    "csv":  "text/csv",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "md":   "text/markdown",
+    "pdf":  "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
+def _demo_mime(filename: str) -> str:
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    return _DEMO_MIME.get(ext, "application/octet-stream")
+
 def _source_file(uploaded) -> SourceFile:
     raw = uploaded.getvalue()
     return SourceFile(filename=uploaded.name, size_bytes=len(raw), raw_bytes=raw)
@@ -566,6 +578,26 @@ else:
 
     uploaded_files = []
     effective_files = [_DemoFile(DEMO_DIR / f) for f in DEMO_FILENAMES if (DEMO_DIR / f).exists()]
+
+    # Source file downloads — lets users grab the raw inputs before processing
+    with st.expander("Download source files (before processing)", expanded=False):
+        st.caption(
+            "These are the raw, unprocessed input files — the 'messy' side of the pipeline. "
+            "Download them now to compare with the processed outputs after you run the pipeline."
+        )
+        src_cols = st.columns(3)
+        for i, fname in enumerate(DEMO_FILENAMES):
+            fpath = DEMO_DIR / fname
+            if fpath.exists():
+                with src_cols[i % 3]:
+                    st.download_button(
+                        label=f"↓  {fname}",
+                        data=fpath.read_bytes(),
+                        file_name=fname,
+                        mime=_demo_mime(fname),
+                        use_container_width=True,
+                        key=f"src_pre_{i}_{fname}",
+                    )
 
 # Validate limits (only for real uploads, not demo)
 upload_errors: list[str] = []
@@ -885,11 +917,38 @@ if report:
     # ── Downloads ─────────────────────────────────────────────────────────────
 
     st.markdown('<hr class="c1-divider">', unsafe_allow_html=True)
-    st.markdown('<div class="c1-section-title">Download Output Files</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="c1-section-desc">Download your cleaned files and the full processing report.</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="c1-section-title">Download Files</div>', unsafe_allow_html=True)
+
+    # Demo mode: source files section (compare before vs after)
+    if demo_mode:
+        st.markdown(
+            '<div class="c1-section-desc" style="margin-bottom:10px;">'
+            'Source files — the raw, unprocessed inputs. Compare with the processed outputs below.</div>',
+            unsafe_allow_html=True,
+        )
+        src_cols = st.columns(3)
+        for i, fname in enumerate(DEMO_FILENAMES):
+            fpath = DEMO_DIR / fname
+            if fpath.exists():
+                with src_cols[i % 3]:
+                    st.download_button(
+                        label=f"↓  {fname} (original)",
+                        data=fpath.read_bytes(),
+                        file_name=fname,
+                        mime=_demo_mime(fname),
+                        use_container_width=True,
+                        key=f"src_post_{i}_{fname}",
+                    )
+        st.markdown(
+            '<div class="c1-section-desc" style="margin-top:16px;margin-bottom:10px;">'
+            'Processed outputs:</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<div class="c1-section-desc">Download your cleaned files and the full processing report.</div>',
+            unsafe_allow_html=True,
+        )
 
     output_dir = Path(CONFIG.output_dir)
     dl_items = []

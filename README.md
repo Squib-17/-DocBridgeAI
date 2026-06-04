@@ -22,6 +22,14 @@ DocBridgeAI solves this problem at the source. It normalizes inputs before they 
 
 ---
 
+## Demo
+
+![DocBridgeAI — demo mode results showing 5 processed files with confidence scores and AI badges](docs/screenshot_demo.png)
+
+Load the 5 pre-built sample files (CSV, XLSX, Markdown, Word, PDF), configure processing options, and see per-file results with confidence scoring, extraction method, AI expansion badge, and quality warnings. Download original source files alongside processed outputs to compare before and after.
+
+---
+
 ## How It Works
 
 ```
@@ -184,10 +192,10 @@ These are design decisions, not architectural limits. See the scalability sectio
 DocBridgeAI extracts text only. Images, charts, diagrams, and graphs embedded in PDF files are **not extracted** — only the surrounding text is processed. A policy document with a flowchart or a report with revenue graphs will produce clean prose output but the visual content will be absent. This is reflected in the confidence score (low text-to-page ratio triggers a lower extraction confidence hint). At scale, replace Tesseract with AWS Textract or Google Document AI, which can describe image regions and extract structured table data.
 
 **Table structure in PDFs**
-PDF extraction via PyMuPDF does not preserve table structure. Table contents are extracted as flat, sequential text. The column-row relationship is lost. For PDFs where table content is critical (e.g., fee schedules, amortization tables), output should be reviewed before RAG ingestion.
+PyMuPDF's `find_tables()` API detects and renders explicitly bordered tables as markdown. However, many PDF tables use whitespace and column alignment rather than visible borders — these are extracted as flat sequential text (column-row relationship is lost). For PDFs where table content is critical (e.g., fee schedules from a PDF generator without explicit borders), output should be reviewed before RAG ingestion. For reliable PDF table extraction at scale, swap PyMuPDF for a cloud OCR service such as AWS Textract or Google Document AI.
 
-**DOCX table rendering (v1 limitation)**
-Tables in Word documents are detected but not yet rendered into the output markdown. A document with a fee schedule table will produce correct prose output, but the table rows will be absent. Check your source document for tables and review the output manually. Fix planned for v1.1 — tables will render as markdown pipe tables in the correct document position.
+**DOCX tables**
+Word document tables are extracted and rendered as GitHub-flavored markdown pipe tables in their correct document position. A quality warning is added to the processing report if tables are detected in the source but absent from the output.
 
 **Heading structure and RAG chunking**
 PDFs do not embed semantic heading markup — heading text looks the same as body text to the extractor. This means PDF output is often flat markdown with no `#` headings. The validator detects this and flags it with a `heading_structure: none` in the frontmatter and a warning in the processing report. **Impact on RAG:** Section-based chunking (split by `##` heading) will not work on flat documents — use sentence-level or semantic chunking instead. The **Generate Headings** feature (requires API key) uses GPT-4o-mini to add heading structure where none exists; generated headings are flagged as `llm_generated_structure: true` so they can be reviewed before ingestion.

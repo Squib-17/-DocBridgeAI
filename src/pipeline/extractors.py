@@ -27,6 +27,48 @@ from .models import DetectedFile, ExtractedContent, SourceFile
 
 
 # ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+def _table_to_markdown(rows: list[list]) -> str:
+    """Render a list of rows (header row first) as a GFM markdown table.
+
+    Single-row detections (e.g. bordered notice boxes in PDFs) are returned
+    as plain text to avoid a header-only table with no data rows.
+    """
+    if not rows:
+        return ""
+    # Normalize: replace newlines with spaces, coerce None to empty string
+    normalized = [
+        [(str(c).replace("\n", " ").strip() if c is not None else "") for c in row]
+        for row in rows
+    ]
+    if len(normalized) == 1:
+        # Likely a bordered box, not a data table — render as plain text
+        return " ".join(c for c in normalized[0] if c)
+    header = normalized[0]
+    col_count = len(header)
+    if col_count == 0:
+        return ""
+    lines = [
+        "| " + " | ".join(header) + " |",
+        "| " + " | ".join(["---"] * col_count) + " |",
+    ]
+    for row in normalized[1:]:
+        padded = (row + [""] * col_count)[:col_count]
+        lines.append("| " + " | ".join(padded) + " |")
+    return "\n".join(lines)
+
+
+def _bbox_overlaps(
+    a: tuple[float, float, float, float],
+    b: tuple[float, float, float, float],
+) -> bool:
+    """Return True if two axis-aligned bounding boxes overlap."""
+    return a[0] < b[2] and a[2] > b[0] and a[1] < b[3] and a[3] > b[1]
+
+
+# ---------------------------------------------------------------------------
 # Base class
 # ---------------------------------------------------------------------------
 
@@ -69,22 +111,19 @@ class PDFTextExtractor(BaseExtractor):
         import fitz  # PyMuPDF
 
         doc = fitz.open(stream=io.BytesIO(source.raw_bytes), filetype="pdf")
-        pages_text: list[str] = []
+        pages_content: list[str] = []
 
         for page in doc:
-            pages_text.append(page.get_text())
+            pages_content.append(self._extract_page_content(page))
 
         doc.close()
 
-        raw_text = "\n\n".join(pages_text)
-        cleaned = self._strip_headers_footers(pages_text)
+        cleaned = self._strip_headers_footers(pages_content)
 
-        # Confidence: penalise if very little text was extracted
         char_count = len(cleaned.strip())
-        page_count = len(pages_text)
-        expected_chars = page_count * 400  # rough baseline: 400 chars/page
+        page_count = len(pages_content)
+        expected_chars = page_count * 400
         confidence = min(1.0, char_count / max(expected_chars, 1))
-        # Cap at 0.98 — PyMuPDF extraction is reliable but never perfect
         confidence = min(confidence, 0.98)
 
         return ExtractedContent(
@@ -95,6 +134,41 @@ class PDFTextExtractor(BaseExtractor):
             extraction_method="pymupdf",
             confidence_hint=confidence,
         )
+
+    def _extract_page_content(self, page) -> str:
+        """
+        Return text and tables from one PDF page, interleaved by vertical position.
+        Text blocks that overlap table bounding boxes are skipped — their content
+        is captured by the table renderer instead.
+        """
+        try:
+            pdf_tables = page.find_tables().tables
+        except Exception:
+            pdf_tables = []
+
+        table_bboxes = [t.bbox for t in pdf_tables]
+        items: list[tuple[float, str]] = []
+
+        for block in page.get_text("blocks"):
+            x0, y0, x1, y1, text, _block_no, block_type = block
+            if block_type != 0:  # skip image blocks
+                continue
+            text = text.strip()
+            if not text:
+                continue
+            if any(_bbox_overlaps((x0, y0, x1, y1), tb) for tb in table_bboxes):
+                continue
+            items.append((y0, text))
+
+        for table in pdf_tables:
+            rows = table.extract()
+            if rows:
+                md = _table_to_markdown(rows)
+                if md:
+                    items.append((table.bbox[1], md))
+
+        items.sort(key=lambda x: x[0])
+        return "\n\n".join(content for _, content in items)
 
     def _strip_headers_footers(self, pages_text: list[str]) -> str:
         """
@@ -199,60 +273,54 @@ class ScannedPDFExtractor(BaseExtractor):
 class DocxExtractor(BaseExtractor):
     """
     Extracts text and tables from a Word document using python-docx.
+    Paragraphs and tables are interleaved in document order so that
+    table content is not silently dropped from the output.
     DOCX extraction is highly reliable; confidence is set to 1.0.
     """
 
     def extract(self, source: SourceFile) -> ExtractedContent:
         from docx import Document
-        from docx.oxml.ns import qn
 
         doc = Document(io.BytesIO(source.raw_bytes))
 
-        paragraphs: list[str] = []
+        # Build element-to-object maps so we can iterate body elements in
+        # document order while retaining python-docx objects (needed for
+        # para.style.name access).
+        para_map = {id(p._p): p for p in doc.paragraphs}
+        table_map = {id(t._tbl): t for t in doc.tables}
+
+        parts: list[str] = []
         tables: list[dict[str, Any]] = []
 
-        # Track which XML elements appear in the document body order
         for block in doc.element.body:
-            tag = block.tag.split("}")[-1] if "}" in block.tag else block.tag
+            block_id = id(block)
 
-            if tag == "p":
-                # Paragraph
-                text = "".join(run.text for run in block.iter() if hasattr(run, "text") and run.tag.endswith("}t"))
-                # Fallback: use docx paragraph objects
-                pass
-
-            if tag == "tbl":
-                # Table — extract as list of rows
-                pass
-
-        # Simpler approach: iterate paragraphs and tables in order
-        paragraphs = []
-        for para in doc.paragraphs:
-            text = para.text.strip()
-            if text:
-                # Preserve heading level as markdown
+            if block_id in para_map:
+                para = para_map[block_id]
+                text = para.text.strip()
+                if not text:
+                    continue
                 if para.style.name.startswith("Heading"):
                     try:
                         level = int(para.style.name.split(" ")[-1])
                     except ValueError:
                         level = 2
                     text = "#" * level + " " + text
-                paragraphs.append(text)
+                parts.append(text)
 
-        for table in doc.tables:
-            rows = []
-            for row in table.rows:
-                cells = [cell.text.strip() for cell in row.cells]
-                rows.append(cells)
-            if rows:
-                tables.append({"rows": rows, "headers": rows[0] if rows else []})
-
-        raw_text = "\n\n".join(paragraphs)
+            elif block_id in table_map:
+                table = table_map[block_id]
+                rows = [[cell.text.strip() for cell in row.cells] for row in table.rows]
+                if rows:
+                    tables.append({"rows": rows, "headers": rows[0]})
+                    md = _table_to_markdown(rows)
+                    if md:
+                        parts.append(md)
 
         return ExtractedContent(
             source=source,
             file_type="docx",
-            raw_text=raw_text,
+            raw_text="\n\n".join(parts),
             tables=tables,
             extraction_method="python-docx",
             confidence_hint=1.0,
