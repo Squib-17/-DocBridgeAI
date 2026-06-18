@@ -165,11 +165,11 @@ uv run streamlit run app.py
 
 Upload up to 5 files, select processing options, and download your cleaned output.
 
-### Run the pipeline via CLI (coming in v1.1)
+The current Streamlit app writes processed files and processing reports to the local `output/` directory.
 
-```bash
-python -m docbridgeai.pipeline --input raw_sources/ --output knowledge-base/
-```
+### CLI status
+
+The core pipeline is importable from Python, but a packaged command-line interface is still roadmap work. For now, use the Streamlit app for the demo workflow, or call `src.pipeline.pipeline.process_batch()` / `process_one()` from a small script if you need a non-UI batch run.
 
 ---
 
